@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSE Stock Analyzer - Live</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .status-bar {
+            background: rgba(255,255,255,0.95);
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            background: rgba(255,255,255,0.9);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            color: #333;
+        }
+        
+        .tab:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+            font-size: 1.5rem;
+        }
+        
+        .live-prices {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .price-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 15px;
+            border-radius: 10px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .price-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        
+        .price-card.updating {
+            animation: cardPulse 1s ease-in-out;
+        }
+        
+        @keyframes cardPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .symbol {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .price {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #111;
+            margin-bottom: 5px;
+        }
+        
+        .change {
+            font-size: 1rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        
+        .change.positive {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .change.negative {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .timestamp {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 8px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .input-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .scan-results {
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f5f7fa;
+        }
+        
+        .badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .badge-excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-good {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .badge-fair {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge-watchlist {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .recommendation {
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .recommendation.buy {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #28a745;
+        }
+        
+        .recommendation.hold {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border: 2px solid #ffc107;
+        }
+        
+        .recommendation.avoid {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 2px solid #dc3545;
+        }
+        
+        .recommendation h3 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .live-prices {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 NSE Stock Analyzer - Live</h1>
+            <p class="subtitle">Real-time price updates • Pattern detection • Beta analysis</p>
+        </header>
+        
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div>
+                <span id="lastUpdate">Last update: --:--:--</span>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('live')">🔴 Live Prices</button>
+            <button class="tab" onclick="switchTab('scanner')">🔍 Stock Scanner</button>
+            <button class="tab" onclick="switchTab('analyzer')">📈 Beta Analyzer</button>
+        </div>
+        
+        <!-- Live Prices Tab -->
+        <div id="liveTab" class="tab-content active">
+            <div class="card">
+                <h2>Live Price Monitor</h2>
+                <div class="controls">
+                    <div class="input-group">
+                        <label for="watchlist">Watchlist (comma-separated symbols):</label>
+                        <input type="text" id="watchlist" value="RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK" placeholder="RELIANCE,TCS,INFY">
+                    </div>
+                    <button onclick="updateWatchlist()">Update Watchlist</button>
+                </div>
+                <div id="livePrices" class="live-prices">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading live prices...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scanner Tab -->
+        <div id="scannerTab" class="tab-content">
+            <div class="card">
+                <h2>Stock Scanner</h2>
+                <div class="controls">
+                    <div class="input-group">
+                        <label for="scanMode">Scan Mode:</label>
+                        <select id="scanMode">
+                            <option value="quick">Quick Scan (Top 50)</option>
+                            <option value="pattern">Pattern Detection</option>
+                            <option value="custom">Custom List</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="customSymbols">Custom Symbols (one per line):</label>
+                        <textarea id="customSymbols" rows="3" placeholder="RELIANCE&#10;TCS&#10;INFY"></textarea>
+                    </div>
+                    <button onclick="startScan()">🚀 Start Scan</button>
+                </div>
+                <div id="scanResults" class="scan-results"></div>
+            </div>
+        </div>
+        
+        <!-- Analyzer Tab -->
+        <div id="analyzerTab" class="tab-content">
+            <div class="card">
+                <h2>Beta & Risk Analysis</h2>
+                <div class="controls">
+                    <div class="input-group">
+                        <label for="analyzeSymbol">Stock Symbol:</label>
+                        <input type="text" id="analyzeSymbol" value="RELIANCE" placeholder="RELIANCE">
+                    </div>
+                    <div class="input-group">
+                        <label for="analyzePeriod">Period:</label>
+                        <select id="analyzePeriod">
+                            <option value="1y">1 Year</option>
+                            <option value="3y">3 Years</option>
+                            <option value="5y">5 Years</option>
+                        </select>
+                    </div>
+                    <button onclick="analyzeStock()">📊 Analyze</button>
+                </div>
+                <div id="analysisResults"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        
+        // Determine WebSocket URL based on environment
+        function getWebSocketURL() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            return `${protocol}//${host}/ws/prices`;
+        }
+        
+        // Determine API URL
+        function getAPIURL() {
+            return window.location.origin;
+        }
+        
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+        }
+        
+        // WebSocket connection
+        function connectWebSocket() {
+            const watchlist = document.getElementById('watchlist').value.split(',').map(s => s.trim());
+            
+            try {
+                ws = new WebSocket(getWebSocketURL());
+                
+                ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    updateStatus('Connected - Live updates active', true);
+                    reconnectAttempts = 0;
+                    
+                    // Send watchlist
+                    ws.send(JSON.stringify({ symbols: watchlist }));
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'price_update') {
+                        updatePrices(data.data);
+                        document.getElementById('lastUpdate').textContent = 
+                            `Last update: ${new Date().toLocaleTimeString()}`;
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateStatus('Connection error', false);
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    updateStatus('Disconnected - Attempting reconnect...', false);
+                    
+                    // Attempt reconnection
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        setTimeout(() => {
+                            console.log(`Reconnection attempt ${reconnectAttempts}`);
+                            connectWebSocket();
+                        }, 3000 * reconnectAttempts);
+                    } else {
+                        updateStatus('Connection failed - Please refresh', false);
+                    }
+                };
+            } catch (error) {
+                console.error('Failed to create WebSocket:', error);
+                updateStatus('Connection failed', false);
+            }
+        }
+        
+        function updateStatus(text, isConnected) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.style.background = isConnected ? '#4ade80' : '#ef4444';
+        }
+        
+        function updatePrices(priceData) {
+            const container = document.getElementById('livePrices');
+            container.innerHTML = '';
+            
+            priceData.forEach(stock => {
+                const card = document.createElement('div');
+                card.className = 'price-card updating';
+                card.onclick = () => showStockDetail(stock.symbol);
+                
+                const changeClass = stock.change >= 0 ? 'positive' : 'negative';
+                const changeSymbol = stock.change >= 0 ? '+' : '';
+                
+                card.innerHTML = `
+                    <div class="symbol">${stock.symbol}</div>
+                    <div class="price">₹${stock.price.toFixed(2)}</div>
+                    <div class="change ${changeClass}">
+                        ${changeSymbol}${stock.change.toFixed(2)}%
+                    </div>
+                    <div class="timestamp">
+                        ${stock.timestamp} • ${stock.status}
+                    </div>
+                `;
+                
+                container.appendChild(card);
+                
+                // Remove animation class after animation completes
+                setTimeout(() => card.classList.remove('updating'), 1000);
+            });
+        }
+        
+        function updateWatchlist() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            connectWebSocket();
+        }
+        
+        function showStockDetail(symbol) {
+            document.getElementById('analyzeSymbol').value = symbol;
+            switchTab('analyzer');
+            document.querySelectorAll('.tab')[2].classList.add('active');
+            analyzeStock();
+        }
+        
+        // Scanner functionality
+        async function startScan() {
+            const mode = document.getElementById('scanMode').value;
+            const resultsDiv = document.getElementById('scanResults');
+            
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Scanning stocks... This may take a minute.</p>
+                </div>
+            `;
+            
+            try {
+                let symbols = [];
+                
+                if (mode === 'custom') {
+                    symbols = document.getElementById('customSymbols').value
+                        .split('\n')
+                        .map(s => s.trim())
+                        .filter(s => s);
+                } else {
+                    // Will use default list from backend
+                    symbols = null;
+                }
+                
+                const response = await fetch(`${getAPIURL()}/api/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        symbols: symbols,
+                        mode: mode 
+                    })
+                });
+                
+                const data = await response.json();
+                displayScanResults(data.results);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        function displayScanResults(results) {
+            const resultsDiv = document.getElementById('scanResults');
+            
+            if (!results || results.length === 0) {
+                resultsDiv.innerHTML = '<p>No results found.</p>';
+                return;
+            }
+            
+            // Sort by score
+            results.sort((a, b) => b.score - a.score);
+            
+            let html = `
+                <h3>Found ${results.length} stocks</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Price</th>
+                            <th>Change %</th>
+                            <th>RSI</th>
+                            <th>Volume</th>
+                            <th>Trend</th>
+                            <th>Score</th>
+                            <th>Rating</th>
+                            <th>Patterns</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            results.forEach(stock => {
+                const ratingClass = stock.rating.toLowerCase().replace(' ', '-');
+                const changeClass = stock.change >= 0 ? 'positive' : 'negative';
+                const patterns = stock.patterns?.map(p => p.name).join(', ') || 'None';
+                
+                html += `
+                    <tr onclick="showStockDetail('${stock.symbol}')" style="cursor: pointer;">
+                        <td><strong>${stock.symbol}</strong></td>
+                        <td>₹${stock.price.toFixed(2)}</td>
+                        <td><span class="change ${changeClass}">${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}%</span></td>
+                        <td>${stock.rsi.toFixed(1)}</td>
+                        <td>${stock.volume_multiple.toFixed(1)}x</td>
+                        <td>${stock.trend}</td>
+                        <td><strong>${stock.score}</strong></td>
+                        <td><span class="badge badge-${ratingClass}">${stock.rating}</span></td>
+                        <td style="font-size: 0.85rem;">${patterns}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Analyzer functionality
+        async function analyzeStock() {
+            const symbol = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
+            const period = document.getElementById('analyzePeriod').value;
+            const resultsDiv = document.getElementById('analysisResults');
+            
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing ${symbol}...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`${getAPIURL()}/api/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol, period })
+                });
+                
+                const data = await response.json();
+                displayAnalysisResults(data);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        function displayAnalysisResults(data) {
+            const resultsDiv = document.getElementById('analysisResults');
+            
+            const recClass = data.recommendation.toLowerCase();
+            
+            let html = `
+                <div class="recommendation ${recClass}">
+                    <h3>${data.recommendation}</h3>
+                    <p>Based on ${data.data_points} data points over ${data.period}</p>
+                    <p>Score: ${data.score}/10</p>
+                </div>
+                
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Current Price</div>
+                        <div class="metric-value">₹${data.price.toFixed(2)}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Beta</div>
+                        <div class="metric-value">${data.beta.toFixed(4)}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Annual Return</div>
+                        <div class="metric-value">${data.annual_return.toFixed(2)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Sharpe Ratio</div>
+                        <div class="metric-value">${data.sharpe_ratio.toFixed(4)}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Volatility</div>
+                        <div class="metric-value">${data.annual_volatility.toFixed(2)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Max Drawdown</div>
+                        <div class="metric-value">${data.max_drawdown.toFixed(2)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">52W High</div>
+                        <div class="metric-value">₹${data.high_52w.toFixed(2)}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">52W Low</div>
+                        <div class="metric-value">₹${data.low_52w.toFixed(2)}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">VaR 95%</div>
+                        <div class="metric-value">${data.var_95.toFixed(2)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Win Rate</div>
+                        <div class="metric-value">${data.win_rate.toFixed(1)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Alpha</div>
+                        <div class="metric-value">${data.alpha.toFixed(4)}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">R²</div>
+                        <div class="metric-value">${data.r_squared.toFixed(4)}</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3>Analysis Reasons:</h3>
+                    <ul>
+                        ${data.reasons.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Initialize WebSocket on page load
+        window.addEventListener('load', () => {
+            connectWebSocket();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
