@@ -66,6 +66,11 @@
             animation: pulse 2s infinite;
         }
         
+        .status-dot.error {
+            background: #ef4444;
+            animation: none;
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -234,7 +239,7 @@
             transition: all 0.3s;
         }
         
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
@@ -286,7 +291,7 @@
             color: #155724;
         }
         
-        .badge-good {
+        .badge-very-good, .badge-good {
             background: #d1ecf1;
             color: #0c5460;
         }
@@ -375,6 +380,15 @@
             margin-bottom: 10px;
         }
         
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
+        }
+        
         @media (max-width: 768px) {
             h1 {
                 font-size: 1.8rem;
@@ -404,7 +418,7 @@
         <div class="status-bar">
             <div class="status-indicator">
                 <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Connecting...</span>
+                <span id="statusText">Loading...</span>
             </div>
             <div>
                 <span id="lastUpdate">Last update: --:--:--</span>
@@ -412,9 +426,9 @@
         </div>
         
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('live')">🔴 Live Prices</button>
-            <button class="tab" onclick="switchTab('scanner')">🔍 Stock Scanner</button>
-            <button class="tab" onclick="switchTab('analyzer')">📈 Beta Analyzer</button>
+            <button class="tab active" onclick="switchTab('live', event)">🔴 Live Prices</button>
+            <button class="tab" onclick="switchTab('scanner', event)">🔍 Stock Scanner</button>
+            <button class="tab" onclick="switchTab('analyzer', event)">📈 Beta Analyzer</button>
         </div>
         
         <!-- Live Prices Tab -->
@@ -485,24 +499,16 @@
     </div>
     
     <script>
-        let ws = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
+        let pollingInterval = null;
+        let isPolling = false;
         
-        // Determine WebSocket URL based on environment
-        function getWebSocketURL() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            return `${protocol}//${host}/ws/prices`;
-        }
-        
-        // Determine API URL
+        // Get API URL
         function getAPIURL() {
             return window.location.origin;
         }
         
         // Tab switching
-        function switchTab(tab) {
+        function switchTab(tab, event) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             
@@ -510,61 +516,67 @@
             document.getElementById(tab + 'Tab').classList.add('active');
         }
         
-        // WebSocket connection
-        function connectWebSocket() {
-            const watchlist = document.getElementById('watchlist').value.split(',').map(s => s.trim());
-            
-            try {
-                ws = new WebSocket(getWebSocketURL());
-                
-                ws.onopen = () => {
-                    console.log('WebSocket connected');
-                    updateStatus('Connected - Live updates active', true);
-                    reconnectAttempts = 0;
-                    
-                    // Send watchlist
-                    ws.send(JSON.stringify({ symbols: watchlist }));
-                };
-                
-                ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'price_update') {
-                        updatePrices(data.data);
-                        document.getElementById('lastUpdate').textContent = 
-                            `Last update: ${new Date().toLocaleTimeString()}`;
-                    }
-                };
-                
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    updateStatus('Connection error', false);
-                };
-                
-                ws.onclose = () => {
-                    console.log('WebSocket disconnected');
-                    updateStatus('Disconnected - Attempting reconnect...', false);
-                    
-                    // Attempt reconnection
-                    if (reconnectAttempts < maxReconnectAttempts) {
-                        reconnectAttempts++;
-                        setTimeout(() => {
-                            console.log(`Reconnection attempt ${reconnectAttempts}`);
-                            connectWebSocket();
-                        }, 3000 * reconnectAttempts);
-                    } else {
-                        updateStatus('Connection failed - Please refresh', false);
-                    }
-                };
-            } catch (error) {
-                console.error('Failed to create WebSocket:', error);
-                updateStatus('Connection failed', false);
-            }
-        }
-        
+        // Update status indicator
         function updateStatus(text, isConnected) {
             document.getElementById('statusText').textContent = text;
             const dot = document.getElementById('statusDot');
-            dot.style.background = isConnected ? '#4ade80' : '#ef4444';
+            if (isConnected) {
+                dot.classList.remove('error');
+            } else {
+                dot.classList.add('error');
+            }
+        }
+        
+        // Polling for live prices
+        async function startPolling() {
+            if (isPolling) return;
+            isPolling = true;
+            
+            updateStatus('Polling active - Updates every 10s', true);
+            
+            // Initial load
+            await pollPrices();
+            
+            // Set up interval
+            pollingInterval = setInterval(pollPrices, 10000);
+        }
+        
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            isPolling = false;
+        }
+        
+        async function pollPrices() {
+            const watchlist = document.getElementById('watchlist').value
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s);
+            
+            const priceData = [];
+            
+            for (const symbol of watchlist) {
+                try {
+                    const response = await fetch(`${getAPIURL()}/api/price/${symbol}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        priceData.push(data);
+                    }
+                } catch (error) {
+                    console.error(`Error fetching ${symbol}:`, error);
+                }
+            }
+            
+            if (priceData.length > 0) {
+                updatePrices(priceData);
+                document.getElementById('lastUpdate').textContent = 
+                    `Last update: ${new Date().toLocaleTimeString()}`;
+            } else {
+                document.getElementById('livePrices').innerHTML = 
+                    '<div class="error-message">No price data available. Market may be closed or symbols invalid.</div>';
+            }
         }
         
         function updatePrices(priceData) {
@@ -586,29 +598,33 @@
                         ${changeSymbol}${stock.change.toFixed(2)}%
                     </div>
                     <div class="timestamp">
-                        ${stock.timestamp} • ${stock.status}
+                        ${stock.timestamp || new Date().toLocaleTimeString()}
                     </div>
                 `;
                 
                 container.appendChild(card);
                 
-                // Remove animation class after animation completes
+                // Remove animation class
                 setTimeout(() => card.classList.remove('updating'), 1000);
             });
         }
         
         function updateWatchlist() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-            connectWebSocket();
+            stopPolling();
+            document.getElementById('livePrices').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading new watchlist...</p>
+                </div>
+            `;
+            startPolling();
         }
         
         function showStockDetail(symbol) {
             document.getElementById('analyzeSymbol').value = symbol;
-            switchTab('analyzer');
-            document.querySelectorAll('.tab')[2].classList.add('active');
-            analyzeStock();
+            const analyzerTab = document.querySelectorAll('.tab')[2];
+            analyzerTab.click();
+            setTimeout(() => analyzeStock(), 100);
         }
         
         // Scanner functionality
@@ -624,16 +640,18 @@
             `;
             
             try {
-                let symbols = [];
+                let symbols = null;
                 
                 if (mode === 'custom') {
                     symbols = document.getElementById('customSymbols').value
                         .split('\n')
                         .map(s => s.trim())
                         .filter(s => s);
-                } else {
-                    // Will use default list from backend
-                    symbols = null;
+                    
+                    if (symbols.length === 0) {
+                        resultsDiv.innerHTML = '<div class="error-message">Please enter at least one stock symbol.</div>';
+                        return;
+                    }
                 }
                 
                 const response = await fetch(`${getAPIURL()}/api/scan`, {
@@ -645,11 +663,15 @@
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 displayScanResults(data.results);
                 
             } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
             }
         }
         
@@ -657,11 +679,10 @@
             const resultsDiv = document.getElementById('scanResults');
             
             if (!results || results.length === 0) {
-                resultsDiv.innerHTML = '<p>No results found.</p>';
+                resultsDiv.innerHTML = '<div class="error-message">No results found. Market may be closed or symbols invalid.</div>';
                 return;
             }
             
-            // Sort by score
             results.sort((a, b) => b.score - a.score);
             
             let html = `
@@ -713,6 +734,11 @@
             const period = document.getElementById('analyzePeriod').value;
             const resultsDiv = document.getElementById('analysisResults');
             
+            if (!symbol) {
+                resultsDiv.innerHTML = '<div class="error-message">Please enter a stock symbol.</div>';
+                return;
+            }
+            
             resultsDiv.innerHTML = `
                 <div class="loading">
                     <div class="spinner"></div>
@@ -727,17 +753,20 @@
                     body: JSON.stringify({ symbol, period })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 displayAnalysisResults(data);
                 
             } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<div class="error-message">Error: ${error.message}<br><small>Market may be closed or symbol invalid.</small></div>`;
             }
         }
         
         function displayAnalysisResults(data) {
             const resultsDiv = document.getElementById('analysisResults');
-            
             const recClass = data.recommendation.toLowerCase();
             
             let html = `
@@ -809,16 +838,14 @@
             resultsDiv.innerHTML = html;
         }
         
-        // Initialize WebSocket on page load
+        // Initialize on page load
         window.addEventListener('load', () => {
-            connectWebSocket();
+            startPolling();
         });
         
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            if (ws) {
-                ws.close();
-            }
+            stopPolling();
         });
     </script>
 </body>
